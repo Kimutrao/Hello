@@ -1,396 +1,596 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import io
-import random
-import datetime
-import requests
+import io, random, datetime, requests, math
 import altair as alt
-import folium
-from folium.plugins import MarkerCluster
-from streamlit_folium import st_folium
-from geopy.geocoders import Nominatim
 from docx import Document
-from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-# ─────────────────────────────────────────
-# 1. 페이지 설정 & 전역 CSS (초록/푸른색 톤 고도화, 붉은색 완전 제거)
-# ─────────────────────────────────────────
-st.set_page_config(
-    page_title="김철수의 투자기록실",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+st.set_page_config(page_title="김철수의 투자기록실", layout="wide", initial_sidebar_state="collapsed")
 
 st.markdown("""
 <style>
 html, body, [class*="css"] { font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif; }
-:root {
-    --green-50:  #EAF5E9; --green-100: #C8E6C9; --green-400: #66BB6A;
-    --green-600: #388E3C; --green-800: #1B5E20;
-    --blue-50:   #E1F5FE; --blue-100:  #B3E5FC; --blue-600:  #0288D1; --blue-800:  #01579B;
-}
-.app-header { padding: 1.2rem 0 0.8rem 0; border-bottom: 2px solid #0288D1; margin-bottom: 1.4rem; }
-.app-title { font-size: 1.7rem; font-weight: 700; color: #01579B; letter-spacing: -0.5px; }
-.app-subtitle { font-size: 0.85rem; color: #555; margin-top: 2px; }
-
-/* 탭 스타일 */
-div[data-baseweb="tab-list"] { gap: 4px; background: #E1F5FE; border-radius: 10px; padding: 4px 6px; }
-button[data-baseweb="tab"] { border-radius: 8px !important; font-size: 0.85rem !important; font-weight: 500 !important; color: #0288D1 !important; background: transparent !important; border: none !important; padding: 6px 14px !important; transition: background 0.18s; }
+div[data-baseweb="tab-list"] { gap: 3px; background: #E1F5FE; border-radius: 10px; padding: 4px 6px; }
+button[data-baseweb="tab"] { border-radius: 8px !important; font-size: 0.82rem !important; font-weight: 500 !important; color: #0288D1 !important; background: transparent !important; border: none !important; padding: 5px 12px !important; }
 button[data-baseweb="tab"][aria-selected="true"] { background: #0288D1 !important; color: #fff !important; }
 button[data-baseweb="tab"]:hover:not([aria-selected="true"]) { background: #B3E5FC !important; }
-
-/* 버튼 및 선택상자 푸른색/초록색 통일 */
-.stButton > button { background-color: #0288D1 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 0.85rem !important; transition: background 0.18s; }
+.stButton > button { background-color: #0288D1 !important; color: white !important; border: none !important; border-radius: 8px !important; font-weight: 600 !important; font-size: 0.83rem !important; }
 .stButton > button:hover { background-color: #01579B !important; }
+.stFormSubmitButton > button { background-color: #388E3C !important; }
+.stFormSubmitButton > button:hover { background-color: #2E7D32 !important; }
 div[data-baseweb="select"] > div { border-color: #0288D1 !important; border-radius: 8px !important; }
 div[data-baseweb="tag"] { background-color: #B3E5FC !important; color: #01579B !important; }
-
-/* 카드 스타일 */
-.metric-card { background: #F1F8E9; border-left: 4px solid #388E3C; border-radius: 10px; padding: 14px 18px; margin-bottom: 10px; }
-.metric-card h4 { margin: 0 0 4px 0; font-size: 0.75rem; color: #555; }
-.metric-card .value { font-size: 1.4rem; font-weight: 700; color: #1B5E20; }
-.section-divider { border: none; border-top: 1.5px solid #B3E5FC; margin: 1.2rem 0; }
-
-/* 타임라인 스타일 */
-.timeline-box { background: #F9FBFD; border-left: 3px solid #0288D1; padding: 8px 12px; margin-bottom: 6px; border-radius: 0 6px 6px 0; }
-.timeline-date { font-size: 0.78rem; color: #666; font-weight: bold; }
-.timeline-content { font-size: 0.9rem; color: #222; margin-top: 2px; }
+.metric-card { background: #F1F8E9; border-left: 4px solid #388E3C; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+.metric-card h4 { margin: 0 0 2px 0; font-size: 0.72rem; color: #666; }
+.metric-card .value { font-size: 1.25rem; font-weight: 700; color: #1B5E20; }
+.sec-div { border: none; border-top: 1.5px solid #B3E5FC; margin: 1rem 0; }
+.timeline-box { background: #F9FBFD; border-left: 3px solid #0288D1; padding: 7px 11px; margin-bottom: 5px; border-radius: 0 5px 5px 0; }
+.timeline-date { font-size: 0.74rem; color: #888; font-weight: 600; }
+.timeline-content { font-size: 0.88rem; color: #222; margin-top: 2px; line-height: 1.5; }
+.board-row { padding: 2px 0; border-bottom: 1px solid #E1F5FE; }
+.result-box { background: #E8F5E9; border: 1.5px solid #66BB6A; border-radius: 10px; padding: 16px 20px; margin-top: 10px; }
+.result-box .r-label { font-size: 0.8rem; color: #555; margin-bottom: 2px; }
+.result-box .r-value { font-size: 1.5rem; font-weight: 700; color: #1B5E20; }
+.result-box .r-sub { font-size: 0.82rem; color: #388E3C; margin-top: 4px; }
+.warn-box { background: #FFF8E1; border: 1.5px solid #FFB300; border-radius: 10px; padding: 16px 20px; margin-top: 10px; }
+.warn-box .r-label { font-size: 0.8rem; color: #555; margin-bottom: 2px; }
+.warn-box .r-value { font-size: 1.5rem; font-weight: 700; color: #E65100; }
+.warn-box .r-sub { font-size: 0.82rem; color: #E65100; margin-top: 4px; }
+.danger-box { background: #FFEBEE; border: 1.5px solid #E53935; border-radius: 10px; padding: 16px 20px; margin-top: 10px; }
+.danger-box .r-label { font-size: 0.8rem; color: #555; margin-bottom: 2px; }
+.danger-box .r-value { font-size: 1.5rem; font-weight: 700; color: #B71C1C; }
+.danger-box .r-sub { font-size: 0.82rem; color: #B71C1C; margin-top: 4px; }
+.app-header { padding: 1rem 0 0.7rem 0; border-bottom: 2px solid #0288D1; margin-bottom: 1.2rem; }
+.app-title { font-size: 1.6rem; font-weight: 700; color: #01579B; letter-spacing: -0.5px; }
+.app-subtitle { font-size: 0.82rem; color: #777; margin-top: 2px; }
+.lock-badge { display: inline-block; background: #FFF3E0; border: 1px solid #FFB300; border-radius: 6px; padding: 2px 10px; font-size: 0.76rem; color: #E65100; font-weight: 600; }
+@media (max-width: 768px) { .app-title { font-size: 1.2rem; } .block-container { padding: 0.7rem 0.7rem !important; } button[data-baseweb="tab"] { font-size: 0.74rem !important; padding: 4px 7px !important; } }
+.block-container { padding-top: 1.3rem !important; max-width: 1200px !important; }
+div[data-testid="stExpander"] summary { font-weight: 600; color: #01579B; }
+div[data-testid="stExpander"] { border-left: 3px solid #0288D1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────
-# 2. 전역 초기 데이터 세팅 (블로그 원문 전체 복원)
-# ─────────────────────────────────────────
+st.markdown("""
+<div class="app-header">
+  <div class="app-title">📗 김철수의 투자기록실</div>
+  <div class="app-subtitle">부동산 시세 분석 · 투자 철학 · 금융 계산기</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ── 관리자 비밀번호 ──
+try:
+    ADMIN_PW = st.secrets["admin"]["password"]
+except Exception:
+    ADMIN_PW = "kimcs2024!"  # ← 본인 비밀번호로 변경
+
+def is_admin():
+    return st.session_state.get("admin_logged_in", False)
+
+# ── Session State ──
+defaults = {
+    'admin_logged_in': False,
+    'board_view': 'list',
+    'current_post': None,
+    'selected_cat': '전체글보기',
+    'compare_apts': [],
+    'dsr_loans': [],
+}
+for k, v in defaults.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
+
 if 'memo_db' not in st.session_state:
     st.session_state['memo_db'] = {
-        '상암월드컵파크10단지': {'지역': '서울 마포구', '기본': '860세대, 2010년식', '매매가': '115000', '갭': '3억', '특징': '초품아, 마포 상암', 'history': [{'date': '2026-06-22', 'opinion': 'DMC 직주근접용 입장권으로 유효함.'}]},
-        '호반베르디움더센트럴': {'지역': '경기 수원시', '기본': '1100세대, 2017년식', '매매가': '82000', '갭': '2억', '특징': '신분당선 호매실 개통 예정', 'history': [{'date': '2026-06-22', 'opinion': '수원 권선구의 가성비 축 단지.'}]},
-        '성복역롯데캐슬골드타운': {'지역': '경기 용인시', '기본': '2300세대, 2019년식', '매매가': '128000', '갭': '4억', '특징': '성복역 지하 통로 연결', 'history': [{'date': '2026-06-22', 'opinion': '신분당선 라인 대장급 입지.'}]}
-    }
-
-if 'geo_db' not in st.session_state:
-    st.session_state['geo_db'] = {
-        '상암월드컵파크10단지': [37.5843, 126.8821],
-        '호반베르디움더센트럴': [37.2735, 126.9422],
-        '성복역롯데캐슬골드타운': [37.3138, 127.0805]
+        '상암월드컵파크10단지': {'지역': '서울 마포구', '기본': '860세대, 2010년식', '매매가': '11.5', '갭': '3억', '특징': '초품아, 마포 상암', 'kb시세': '11.2', 'history': [{'date': '2026-06-22', 'opinion': 'DMC 직주근접용 입장권으로 유효함.'}]},
+        '호반베르디움더센트럴': {'지역': '경기 수원시', '기본': '1100세대, 2017년식', '매매가': '8.2', '갭': '2억', '특징': '신분당선 호매실 개통 예정', 'kb시세': '8.0', 'history': [{'date': '2026-06-22', 'opinion': '수원 권선구의 가성비 축 단지.'}]},
+        '성복역롯데캐슬골드타운': {'지역': '경기 용인시', '기본': '2300세대, 2019년식', '매매가': '12.8', '갭': '4억', '특징': '성복역 지하 통로 연결', 'kb시세': '12.5', 'history': [{'date': '2026-06-22', 'opinion': '신분당선 라인 대장급 입지.'}]},
     }
 
 if 'blog_db' not in st.session_state:
     st.session_state['blog_db'] = [
-        {"category": "투자 마인드 & 철학", "title": "1. 부동산 시장 접근과 매수 의미", "date": "2026-06", "content": """지난달 생각의 연장선에서. 유의미한 상승이 지속될까? 잘 모르겠음. 물음표. 이런 관점에서 투자대상으로서의 부동산은 유의미한가? 그럴 수도 아닐 수도. 거주대상으로서의 부동산은 유의미한가? 매우 그러함.\n\n이제 아파트 시장은 돈을 벌기 위함보다는 미래에 사지 못하게 되는 것을 경계하며 구매가 가능할 때 구매를 해둬야하는 리스크 헷지 상품이 되어버림. 없다면 무조건 매수를 해야하는 존재. 돈을 벌기 위함이라면 대체투자상품이 매우 많음. 그리고 현재 나라 상황상, 유주택자에게는 달러와 코인이 더 유의미해질 것 같음."""},
-        {"category": "투자 마인드 & 철학", "title": "2. 임장의 의미 재정의", "date": "2026-06", "content": """임장도 이제 개념을 바꿔서 적용시켜야 하지 않을까. 많이 돌아다녀보는게 중요해짐. 가격을 비교하고 평가하는건 중요하지 않음. 동네의 특성, 분위기를 익혀야함. 도로 정비상태, 경사도, 혼잡도, 신호, 주변건물의 종류 등 현장에서만 알 수 있는 정보들이 무조건 있음.\n\n이런 정보들은 가격을 비교하기 위함이 아님. 나의 취향을 알고 선택하기 위해서 매우 중요. 과거처럼 거래를 자유롭게 할 수 없어짐. 돈의 문제가 아니라, 절차와 규제의 문제. 한번의 잘못된 선택으로 되돌리기가 힘들기 때문에 한번 할 때 최대한 나의 취향을 많이 반영시켜야함. 그걸 알기 위해서 임장을 많이 다녀야함. 가장 마음에 드는 동네를 찾기 위해서."""},
-        {"category": "규제 & 정책 분석", "title": "3. 영끌금지와 생존 세팅값", "date": "2026-06", "content": """대한민국은 자유가 사라지는 중. 모든 분야 가리지 않고 규제, 제재가 생기고 있음. 부동산시장을 기준으로 대출규제 거래규제등을 통해 임차시장을 없애고 매매시장만 남겨놓으며 가격을 올림. 올라간 가격에 세금을 누진적으로 부과중.\n\n매수 가능한 사람을 없애버림. 매도를 할 수 밖에 없는 사람들을 만들어냄. 이런 시나리오 기준 주택 가격상승 = 세금증가, 대출규제 = 월 소득 외에 현금창출 불가, 확장재정 = 인플레, 고환율 = 생활비 부담 증가. 이미 정해진 경제상황. 영끌하다가 자칫하면 버티지 못하는 상황이 올 수도 있음. 조금 더 큰 수익을 얻기위해 과한 영끌을 하기 보다 장기간 더 버틸 수 있는 세팅값에 의미를 두는게 좋지 않을까. 1금융에서 해주는 정도의 대출만 실행. 40대 이후부터는 공격적인 대출 자제. 자산이 없는 30대라면 최대한 대출을 받는게 이득이긴 함."""},
-        {"category": "투자 마인드 & 철학", "title": "4. 부동산 시장 관심의 경고", "date": "2026-06", "content": """관심이 없이 그냥 흘러가는대로 뒀더니 대출이 막히고 주택수 규제가 생기고 전월세 매물이 사라짐. 시간이 지나면 피해는 그대로 내게 다가옴. 실질 소득이 줄어들고 자산격차가 커지고 월세가 올라가는 문제는 전혀 중요하지 않을 정도. 전세 월세 매물이 없음. 외곽으로 점점 나가야함. 주거 자체가 불가능한 방향으로 가는 중. 부동산만큼은 관심을 빨리가지고 접근을 해야 준비를 할 수 있고 준비를 해둬야 5년 10년뒤에 피해자가 되는걸 막을 수 있음."""},
-        {"category": "시장 전망 & 매크로", "title": "5. 과열 조짐과 공급 절벽의 미래", "date": "2026-04", "content": """매물기록 방법과 사이트를 바꿔보려고 새로운 기록을 시도 중. 매물숫자를 보니 어처구니가 없을 정도로 없다. 가격 Up, 거래량 Down, 매물 Down. 소량의 신고가가 전체 호가를 올리지만 거래량이 따라올 수 없는 상황. 개인적으론 흐름의 지속성에 대해서는 의문이 생김. 상승폭이 큰 곳들은 과열 느낌이며 신고가를 따라서 추격매수는 글쎄. 서울 중심부에서 가격이 안오른 물건보다 경기도 상대적으로 덜 오른 물건이 낫지 않을까."""},
-        {"category": "규제 & 정책 분석", "title": "6. 전월세 공급과 수요 억제책의 역설", "date": "2025-10", "content": """24~25년 갱신이 만료되는 26~27년 사이 수요자 다수 발생. 28년까지 준공 물량 별로 없음. 대출규제는 수요가 줄어드는게 아니라 억누르고 있는 것뿐. 억눌린 수요는 매수가 가능한 시점이 오면 돈을 더 주더라도 억지로라도 매수를 하려고 함. 언제 못하게 될지 모르니까. 규제는 수요의 왜곡과 가격상승을 만듬. 전세가율로 매매가를 정하는 시대는 지남. 남들 얼마 벌었다 보지 말고 내가 가진 시드 기준(4~9억대)에서 기회를 찾아야 함."""},
-        {"category": "규제 & 정책 분석", "title": "7. 대출 규제 포장과 사면 안되는 자산", "date": "2025-07", "content": """정부의 대출규제 요약해보면 실거주 1주택만 하라는 압박. 빌라, 오피스텔은 사망선고라 생각됨. 돈이 들어올 틈이 없어짐. 분양권도 실입주가 아니면 불가능한 구조. 가장 큰 이슈는 '소득증빙' 영역. 모든 항목이 국세청 소득이 잡혀있지 않으면 제한되는 방향으로 변함. 본업에 소홀하면 부동산 투자를 시작하는 것 조차 어려워짐. 소액으로 고수익을 쫓는건 부동산에서 할 수 있는 영역이 아님. 그만 찾고 시드 모아 한번에 좋은거 해야함."""},
-        {"category": "자유 메모", "title": "8. 정권교체 시나리오와 대출 공부", "date": "2025-06", "content": """대출 상품과 조건이 너무 복잡함. 상환하고 다시 받는게 너무나도 무서운 상황. 대출 공부를 많이 한 사람과 안 한 사람의 차이가 벌어질 것. 규제가 생기면 매도 가능한 물건이 줄어들어 결국 정말 필요한 사람들만 눈물을 머금고 비싸게 사는 상황이 생길 수도 있음. 소상공인 입장에선 생활권이 서울이 아니라면 탈서울이 필수일 수도 있음. 신축 대단지 주변환경 조건값을 맞추면 적은 금액으로도 실거주 선택지가 많음."""},
-        {"category": "투자 마인드 & 철학", "title": "9. 서민주거의 착각과 가치 정비", "code_date": "2025-05", "date":"2025-05", "content": """집값이 비싸다고 불만을 가진 사람, 무주택 서민을 보호해야 한다는 프레임에 갇힌 사람들과는 거리를 두어야 함. 부동산은 지역 이름보다 자신의 상황에 맞는 투자방법이 무엇일지 고민해야 함. 상급지 하급지 획일적 구분이 아니라 내 생활권 기준 접근성의 가성비를 봐야 함. 앞으로는 아파트 단지만 깨끗한 것보다 분당, 일산, 평촌처럼 주변 환경이 통째로 잘 정비된 곳의 가치가 훨씬 높아질 것임."""},
-        {"category": "자유 메모", "title": "10. 실물 경기 체감과 소유의 기분", "date": "2025-02", "content": """체감경기가 상당히 안 좋음. 자영업자 소상공인이 힘든 구간이라 자산가격이 쉽게 상승할 여건은 아님. 결국 정치가 정리되면 경제 살리기를 위해 부동산 부양으로 시작할 수밖에 없음. 1주택자 기준에선 상급지 갈아타기를 위해 주택가격이 하락해야 부자가 될 가능성이 높아짐에도 대다수는 기분 때문에 오르기만 바람. 돈을 번 것 같은 '기분'과 '현실'을 철저히 구분해야 인생이 바뀜."""}
+        {"category": "투자 마인드 & 철학", "title": "1. 부동산 시장 접근과 매수 의미", "date": "2026-06", "content": "지난달 생각의 연장선에서. 유의미한 상승이 지속될까? 잘 모르겠음.\n\n이제 아파트 시장은 돈을 벌기 위함보다는 미래에 사지 못하게 되는 것을 경계하며 구매가 가능할 때 구매를 해둬야하는 리스크 헷지 상품이 되어버림. 없다면 무조건 매수를 해야하는 존재."},
+        {"category": "투자 마인드 & 철학", "title": "2. 임장의 의미 재정의", "date": "2026-06", "content": "임장도 이제 개념을 바꿔서 적용시켜야 하지 않을까. 많이 돌아다녀보는게 중요해짐. 가격을 비교하고 평가하는건 중요하지 않음. 동네의 특성, 분위기를 익혀야함."},
+        {"category": "규제 & 정책 분석", "title": "3. 영끌금지와 생존 세팅값", "date": "2026-06", "content": "대한민국은 자유가 사라지는 중. 조금 더 큰 수익을 얻기위해 과한 영끌을 하기 보다 장기간 더 버틸 수 있는 세팅값에 의미를 두는게 좋지 않을까."},
+        {"category": "시장 전망 & 매크로", "title": "4. 과열 조짐과 공급 절벽의 미래", "date": "2026-04", "content": "가격 Up, 거래량 Down, 매물 Down. 소량의 신고가가 전체 호가를 올리지만 거래량이 따라올 수 없는 상황."},
+        {"category": "규제 & 정책 분석", "title": "5. 전월세 공급과 수요 억제책의 역설", "date": "2025-10", "content": "24~25년 갱신이 만료되는 26~27년 사이 수요자 다수 발생. 28년까지 준공 물량 별로 없음. 대출규제는 수요를 억누르고 있는 것뿐."},
+        {"category": "규제 & 정책 분석", "title": "6. 대출 규제와 사면 안되는 자산", "date": "2025-07", "content": "정부의 대출규제 요약해보면 실거주 1주택만 하라는 압박. 빌라, 오피스텔은 사망선고."},
+        {"category": "자유 메모", "title": "7. 실물 경기 체감과 소유의 기분", "date": "2025-02", "content": "체감경기가 상당히 안 좋음. 돈을 번 것 같은 '기분'과 '현실'을 철저히 구분해야 인생이 바뀜."},
     ]
 
-if 'board_view' not in st.session_state: st.session_state['board_view'] = 'list'
-if 'current_post' not in st.session_state: st.session_state['current_post'] = None
-if 'selected_cat' not in st.session_state: st.session_state['selected_cat'] = "전체글보기"
+# ── 사이드바 관리자 로그인 ──
+with st.sidebar:
+    st.markdown("### 🔐 관리자 로그인")
+    if is_admin():
+        st.success("✅ 관리자 모드 활성")
+        if st.button("로그아웃"):
+            st.session_state['admin_logged_in'] = False
+            st.rerun()
+    else:
+        pw = st.text_input("비밀번호", type="password", key="admin_pw_input")
+        if st.button("로그인"):
+            if pw == ADMIN_PW:
+                st.session_state['admin_logged_in'] = True
+                st.rerun()
+            else:
+                st.error("비밀번호가 틀렸습니다.")
+    st.markdown("---")
+    st.caption("Google 계정 연동: OAuth 설정 별도 필요")
 
-# ─────────────────────────────────────────
-# 3. 탭 구성 (대출분석 매크로 탭으로 이동 완료)
-# ─────────────────────────────────────────
 tab_basic, tab_mind, tab_realestate, tab_finance = st.tabs([
-    "📖 투자철학 요약", "🧠 기록 & 게시판", "🏢 특정지역별 관심단지 & 지도", "💰 계산기 & 자동 매크로"
+    "📖 투자철학 요약", "🧠 기록 & 게시판", "🏢 관심단지 & 비교", "💰 계산기 & 매크로"
 ])
 
-# =================================================================
-# 탭 1: 투자철학 요약
-# =================================================================
+# ═══════════════════════════════════════════
+# 탭 1: 투자철학
+# ═══════════════════════════════════════════
 with tab_basic:
+    if not is_admin():
+        st.markdown('<span class="lock-badge">🔒 읽기 전용 — 왼쪽 사이드바에서 관리자 로그인</span>', unsafe_allow_html=True)
     st.subheader("📖 흔들리지 않는 4가지 핵심 기준")
     col1, col2 = st.columns(2)
     with col1:
-        with st.expander("💡 1. 부동산의 본질은 '리스크 헷지'", expanded=True):
-            st.markdown("*\t돈을 벌기 위함이 아니라, 사지 못하게 되는 것을 막는 수단*\n* 알파 수익을 원한다면 달러, 미국 주식, 코인 등 대체재가 많습니다.\n* 현재 아파트는 무조건 매수해 두어야 하는 '주거 입장권'이자 생존 방어막입니다.")
+        with st.expander("💡 1. 부동산의 본질은 리스크 헷지", expanded=True):
+            st.markdown("- 돈을 벌기 위함이 아니라, 사지 못하게 되는 것을 막는 수단\n- 알파 수익을 원한다면 달러, 미국 주식, 코인 등 대체재가 많습니다.\n- 현재 아파트는 무조건 매수해 두어야 하는 주거 입장권이자 생존 방어막입니다.")
         with st.expander("🔑 2. 영끌 금지와 개인의 상황"):
-            st.markdown("*\t보편적인 정답은 없다. 오직 '나의 생애주기'만 있을 뿐.*\n* 자산이 없는 30대라면 최대한 대출을 당겨 자산을 선점하는 것이 맞습니다.\n* 하지만 소득 감소가 예상되는 40대 이상이라면 공격적인 대출은 독입니다.")
+            st.markdown("- 보편적인 정답은 없다. 오직 나의 생애주기만 있을 뿐.\n- 자산이 없는 30대라면 최대한 대출을 당겨 자산을 선점하는 것이 맞습니다.\n- 소득 감소가 예상되는 40대 이상이라면 공격적인 대출은 독입니다.")
     with col2:
         with st.expander("🔇 3. 시장의 소음 구별법", expanded=True):
-            st.markdown("*\t금액을 논하는 자는 멀리하고, 시대 흐름을 논하는 자를 곁에 두라.*\n* 하락장에선 비관론을, 상승장에선 무한 낙관론을 외치는 유튜버의 목적은 오직 '조회수'입니다.")
+            st.markdown("- 금액을 논하는 자는 멀리하고, 시대 흐름을 논하는 자를 곁에 두라.\n- 하락장엔 비관론, 상승장엔 낙관론을 외치는 유튜버의 목적은 오직 조회수입니다.")
         with st.expander("💸 4. 세금을 계산하지 않은 투자는 허상"):
-            st.markdown("*\t보유세와 거래세의 밸런스 게임*\n* 취득세, 양도세, 보유세 시뮬레이션 없이 무작정 주택 수만 늘리는 것은 빈 수레와 같습니다.")
+            st.markdown("- 보유세와 거래세의 밸런스 게임\n- 취득세, 양도세, 보유세 시뮬레이션 없이 무작정 주택 수만 늘리는 것은 빈 수레입니다.")
 
-# =================================================================
-# 탭 2: 기록 & 게시판 (원문 포스트 독립 게시판 완성)
-# =================================================================
+# ═══════════════════════════════════════════
+# 탭 2: 기록 & 게시판
+# ═══════════════════════════════════════════
 with tab_mind:
-    st.subheader("🧠 과거 기록실 (원문 전체 수록)")
     cat_list = ["전체글보기", "투자 마인드 & 철학", "규제 & 정책 분석", "시장 전망 & 매크로", "자유 메모"]
     col_menu, col_board = st.columns([2, 8])
-    
+
     with col_menu:
         st.markdown("#### 📂 카테고리")
-        selected_cat = st.radio("목록", cat_list, key="board_cat_radio", label_visibility="collapsed")
+        selected_cat = st.radio("카테고리", cat_list, key="board_cat_radio", label_visibility="collapsed")
         if selected_cat != st.session_state['selected_cat']:
             st.session_state['selected_cat'] = selected_cat
             st.session_state['board_view'] = 'list'
             st.rerun()
-        if st.button("✍️ 생각 작성하기", use_container_width=True):
-            st.session_state['board_view'] = 'write'
-            st.rerun()
+        if is_admin():
+            if st.button("✍️ 새 글 작성", use_container_width=True):
+                st.session_state['board_view'] = 'write'
+                st.rerun()
+        else:
+            st.markdown('<span class="lock-badge">🔒 작성: 관리자만</span>', unsafe_allow_html=True)
 
     with col_board:
-        if st.session_state['selected_cat'] == "전체글보기":
-            display_posts = list(st.session_state['blog_db'])
-        else:
-            display_posts = [p for p in st.session_state['blog_db'] if p['category'] == st.session_state['selected_cat']]
+        display_posts = list(st.session_state['blog_db']) if st.session_state['selected_cat'] == "전체글보기" else [p for p in st.session_state['blog_db'] if p['category'] == st.session_state['selected_cat']]
 
-        if st.session_state['board_view'] == 'write':
+        if st.session_state['board_view'] == 'write' and is_admin():
             st.markdown("#### ✏️ 새 글 작성")
             with st.form("write_form"):
                 new_cat = st.selectbox("카테고리", cat_list[1:])
                 new_title = st.text_input("제목")
-                new_content = st.text_area("내용", height=300)
+                new_content = st.text_area("내용", height=280)
                 if st.form_submit_button("등록"):
                     if new_title and new_content:
                         ym = datetime.datetime.now().strftime("%Y-%m")
                         st.session_state['blog_db'].insert(0, {"category": new_cat, "title": new_title, "content": new_content, "date": ym})
                         st.session_state['board_view'] = 'list'
                         st.rerun()
+
         elif st.session_state['board_view'] == 'read':
             post = st.session_state['current_post']
             if st.button("⬅️ 목록으로"):
                 st.session_state['board_view'] = 'list'
                 st.rerun()
             st.markdown(f"### {post['title']}")
-            st.caption(f"분류: {post['category']} | 작성연월: {post['date']}")
-            st.markdown('<hr style="border-top:1px solid #B3E5FC;">', unsafe_allow_html=True)
-            st.write(post['content'].replace("\n", "<br>"), unsafe_allow_html=True)
+            st.caption(f"분류: {post['category']} | {post['date']}")
+            st.markdown('<hr style="border-top:1px solid #B3E5FC; margin:6px 0;">', unsafe_allow_html=True)
+            for line in post['content'].split('\n'):
+                st.markdown(line if line.strip() else "&nbsp;", unsafe_allow_html=True)
+            if is_admin():
+                st.markdown('<hr class="sec-div">', unsafe_allow_html=True)
+                with st.form("edit_post_form"):
+                    edit_content = st.text_area("내용 수정 (관리자)", value=post['content'], height=200)
+                    if st.form_submit_button("수정 저장"):
+                        for i, p in enumerate(st.session_state['blog_db']):
+                            if p['title'] == post['title']:
+                                st.session_state['blog_db'][i]['content'] = edit_content
+                                st.session_state['current_post'] = st.session_state['blog_db'][i]
+                                break
+                        st.success("수정 완료!")
+                        st.rerun()
+
         else:
             st.markdown(f"#### 📜 {st.session_state['selected_cat']}")
             for idx, post in enumerate(display_posts):
-                with st.container():
-                    c1, c2, c3 = st.columns([5, 3, 2])
-                    with c1:
-                        if st.button(post['title'], key=f"post_btn_{idx}_{post['title'][:3]}"):
-                            st.session_state['current_post'] = post
-                            st.session_state['board_view'] = 'read'
-                            st.rerun()
-                    with c2: st.caption(f"🔹 {post['category']}")
-                    with c3: st.caption(f"📅 {post['date']}")
-                    st.markdown("<hr style='margin:0px; padding:0px; border-top: 1px solid #E1F5FE;'>", unsafe_allow_html=True)
-
-# =================================================================
-# 탭 3: 특정지역별 관심단지 & 지도 (UX 대공사 + 주소 검색 + 수정/타임라인 연동)
-# =================================================================
-with tab_realestate:
-    st.subheader("🏢 지역별 관심 단지 레이더 & 통합 임장노트")
-    
-    # 데이터 생성을 위한 백데이터 함수
-    def get_mock_trends(apt_name):
-        months = ['2025-01', '2025-04', '2025-07', '2025-10', '2026-01', '2026-04']
-        base_prices = {'상암월드컵파크10단지': 11.2, '호반베르디움더센트럴': 8.1, '성복역롯데캐슬골드타운': 12.8}
-        bp = base_prices.get(apt_name, 9.0)
-        random.seed(len(apt_name))
-        return pd.DataFrame([{'계약월': m, '아파트명': apt_name, '거래금액(억)': round(bp + random.uniform(-0.3, 0.3), 2)} for m in months])
-
-    # 1/3 좌측 컨트롤 타워 (지역 카테고리 선선택 구조)
-    col_panel, col_main_view = st.columns([3, 7])
-    
-    with col_panel:
-        st.markdown("##### 📍 1단계: 지역 카테고리 선택")
-        region_options = ["서울 마포구", "경기 수원시", "경기 용인시", "직접 추가"]
-        selected_region = st.selectbox("조회할 지역구", region_options)
-        
-        # 해당 지역 단지 매칭
-        apts_in_region = [name for name, info in st.session_state['memo_db'].items() if info.get('지역') == selected_region]
-        
-        st.markdown("##### 🏢 2단계: 관심 단지 목록")
-        if not apts_in_region:
-            st.caption("해당 지역에 등록된 관심 단지가 없습니다. 아래에서 새로 등록해 주세요.")
-            chosen_apt = None
-        else:
-            chosen_apt = st.radio("상세 정보를 보실 단지를 선택하세요", apts_in_region)
-
-        st.markdown('<hr style="border-top:1px solid #B3E5FC;">', unsafe_allow_html=True)
-        st.markdown("##### ➕ 신규 단지 등록 및 위치 핀셋 검색")
-        
-        with st.form("new_apt_geo_form"):
-            new_reg = st.text_input("지역명", value=selected_region if selected_region != "직접 추가" else "서울 ")
-            new_name = st.text_input("단지명", placeholder="예: 녹번역e편한세상캐슬")
-            search_addr = st.text_input("실제 주소 입력 (지도 매핑용)", placeholder="예: 서울 은평구 은평로 220")
-            new_hh = st.text_input("세대수/연식", placeholder="2569세대, 2020년식")
-            new_price = st.text_input("매매 호가 (억원)", placeholder="13.2억")
-            new_gap = st.text_input("갭/전세가율", placeholder="5.5억 / 58%")
-            new_feat = st.text_input("단지 주요 호재", placeholder="3호선 역세권, 초품아")
-            new_op = st.text_area("첫 투자 의견", placeholder="주변 전세가 상승 추이 모니터링 필요")
-            
-            if st.form_submit_button("📍 주소 검색 및 대시보드 등록"):
-                if new_name and search_addr:
-                    try:
-                        geolocator = Nominatim(user_agent="kimtaro_invest_app")
-                        location = geolocator.geocode(search_addr, timeout=10)
-                        if location:
-                            st.session_state['geo_db'][new_name] = [location.latitude, location.longitude]
-                            st.session_state['memo_db'][new_name] = {
-                                '지역': new_reg, '기본': new_hh, '매매가': new_price, '갭': new_gap, '특징': new_feat,
-                                'history': [{'date': datetime.datetime.now().strftime("%Y-%m-%d"), 'opinion': new_op}]
-                            }
-                            st.success(f"🎯 위치 좌표 확인 완료 및 관심 리스트 등록 성공!")
-                            st.rerun()
-                        else:
-                            st.error("주소를 찾지 못했습니다. 정확한 도로명 주소로 입력해 주세요.")
-                    except Exception as e:
-                        st.error("네트워크 허용 허들로 인해 기본 기본 좌표값으로 임시 매핑합니다.")
-                        st.session_state['geo_db'][new_name] = [37.5665, 126.9780]
-                        st.session_state['memo_db'][new_name] = {
-                            '지역': new_reg, '기본': new_hh, '매매가': new_price, '갭': new_gap, '특징': new_feat,
-                            'history': [{'date': datetime.datetime.now().strftime("%Y-%m-%d"), 'opinion': new_op}]
-                        }
+                col_t, col_c, col_d = st.columns([5, 3, 2])
+                with col_t:
+                    if st.button(post['title'], key=f"p_{idx}_{post['title'][:6]}", use_container_width=True):
+                        st.session_state['current_post'] = post
+                        st.session_state['board_view'] = 'read'
                         st.rerun()
+                with col_c:
+                    st.caption(f"🔹 {post['category']}")
+                with col_d:
+                    st.caption(f"📅 {post['date']}")
 
-    # 2/3 우측 대형 뷰어 (지도 + 시세 가로 가독성 완성 + 타임라인식 업데이트 수정창)
-    with col_main_view:
-        if chosen_apt:
-            apt_info = st.session_state['memo_db'][chosen_apt]
-            coords = st.session_state['geo_db'].get(chosen_apt, [37.5665, 126.9780])
-            
-            # 메인 상단: 네이버형 인터랙티브 위경도 맵
-            st.markdown(f"##### 🎯 {chosen_apt} 입지 레이더")
-            m = folium.Map(location=coords, zoom_start=14)
-            popup_html = f"<b>{chosen_apt}</b><br>호가: {apt_info.get('매매가','-')}억<br>갭: {apt_info.get('갭','-')}"
-            folium.Marker(location=coords, popup=folium.Popup(popup_html, max_width=200), icon=folium.Icon(color='blue', icon='home')).add_to(m)
-            st_folium(m, width=850, height=350, key=f"map_{chosen_apt}")
-            
-            # 메인 중단: 고개 돌리지 않는 시세 그래프 (X축 레이블 회전값 0도 고정)
-            st.markdown("##### 📈 월별 실거래 평단가 트렌드")
-            df_trend = get_mock_trends(chosen_apt)
-            
-            chart = alt.Chart(df_trend).mark_line(point=True, strokeWidth=3).encode(
-                x=alt.X('계약월:O', title='계약월', axis=alt.Axis(labelAngle=0, labelFontSize=11)), # 0도 고정으로 가로 정렬 완성
-                y=alt.Y('거래금액(억):Q', title='금액 (억원)', scale=alt.Scale(zero=False)),
-                color=alt.Color('아파트명:N', scale=alt.Scale(range=['#0288D1']), legend=alt.Legend(title="단지명(동일 색상 매칭)")),
-                tooltip=['계약월', '거래금액(억)']
-            ).properties(height=220)
-            st.altair_chart(chart, use_container_width=True)
-            
-            # 메인 하단: 데이터 정보 패널 및 연속 의견 업데이트 시스템 (날짜 무조건 누적 표시)
-            st.markdown("##### 🗂️ 핵심 판단 지표 & 누적 코멘트 타임라인")
-            
-            col_d1, col_d2, col_d3 = st.columns(3)
-            with col_d1: st.metric("연식 및 세대수", apt_info.get('기본','-'))
-            with col_d2: st.metric("현재 매매 호가", f"{apt_info.get('매매가','-')} 억")
-            with col_d3: st.metric("현재 갭 / 전세가율", apt_info.get('갭','-'))
-            
-            # 타임라인식 연속 댓글/의견 표출 구조
-            st.markdown("**📄 투자 의견 히스토리 (기록 날짜 의무 표기)**")
-            for h in apt_info.get('history', []):
-                st.markdown(f"""
-                <div class="timeline-box">
-                    <div class="timeline-date">📅 {h['date']} 작성</div>
-                    <div class="timeline-content">{h['opinion']}</div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-            # 수정 및 누적 추가 폼
-            with st.form(f"append_comment_{chosen_apt}"):
-                st.markdown("**✏️ 기존 정보 수정 및 추가 의견 업데이트**")
-                up_price = st.text_input("매매 호가 수정", value=apt_info.get('매매가', ''))
-                up_gap = st.text_input("갭 수정", value=apt_info.get('갭', ''))
-                append_op = st.text_area("✍️ 새로운 임장 판단 추가 기록", placeholder="시간이 지나면서 바뀐 생각을 연이어 적어두세요.")
-                
-                if st.form_submit_button("💾 정보 업데이트 및 타임라인 누적"):
-                    st.session_state['memo_db'][chosen_apt]['매매가'] = up_price
-                    st.session_state['memo_db'][chosen_apt]['갭'] = up_gap
-                    if append_op:
-                        st.session_state['memo_db'][chosen_apt]['history'].append({
-                            'date': datetime.datetime.now().strftime("%Y-%m-%d"),
-                            'opinion': append_op
-                        })
-                    st.success("데이터가 성공적으로 업데이트 및 누적 기록되었습니다.")
+# ═══════════════════════════════════════════
+# 탭 3: 관심단지 & 비교
+# ═══════════════════════════════════════════
+with tab_realestate:
+    st.subheader("🏢 관심단지 레이더 & 교차 비교")
+
+    def get_mock_trends(apt_name):
+        months = ['2024-07','2024-10','2025-01','2025-04','2025-07','2025-10','2026-01','2026-04']
+        bp_map = {'상암월드컵파크10단지': 10.8, '호반베르디움더센트럴': 7.8, '성복역롯데캐슬골드타운': 12.2}
+        bp = bp_map.get(apt_name, 9.0)
+        random.seed(len(apt_name) * 7)
+        trend, rows = 0.0, []
+        for m in months:
+            trend += random.uniform(-0.05, 0.15)
+            rows.append({'계약월': m, '아파트명': apt_name, '거래금액(억)': round(bp + trend + random.uniform(-0.2, 0.2), 2)})
+        return pd.DataFrame(rows)
+
+    subtab_single, subtab_compare, subtab_add = st.tabs(["🔍 단지 상세", "📊 비교 분석", "➕ 단지 등록/수정"])
+
+    with subtab_single:
+        col_panel, col_view = st.columns([3, 7])
+        with col_panel:
+            st.markdown("##### 📍 지역 선택")
+            all_regions = sorted(set(v['지역'] for v in st.session_state['memo_db'].values()))
+            sel_region = st.selectbox("지역", ["전체"] + all_regions, key="single_region")
+            region_apts = list(st.session_state['memo_db'].keys()) if sel_region == "전체" else [k for k, v in st.session_state['memo_db'].items() if v.get('지역') == sel_region]
+            st.markdown("##### 🏢 단지 선택")
+            chosen_apt = st.radio("단지", region_apts, key="single_apt") if region_apts else None
+            if not region_apts:
+                st.caption("등록된 단지가 없습니다.")
+            if chosen_apt:
+                if st.button("📊 비교 목록에 추가"):
+                    if chosen_apt not in st.session_state['compare_apts']:
+                        st.session_state['compare_apts'].append(chosen_apt)
+                        st.success(f"'{chosen_apt}' 추가됨")
+
+        with col_view:
+            if chosen_apt:
+                info = st.session_state['memo_db'][chosen_apt]
+                st.markdown(f"##### 🎯 {chosen_apt}")
+                c1, c2, c3 = st.columns(3)
+                with c1: st.metric("매매 호가", f"{info.get('매매가', '-')} 억")
+                with c2: st.metric("KB 시세", f"{info.get('kb시세', '-')} 억")
+                with c3: st.metric("갭", info.get('갭', '-'))
+                df_trend = get_mock_trends(chosen_apt)
+                chart = alt.Chart(df_trend).mark_line(point=True, strokeWidth=2.5).encode(
+                    x=alt.X('계약월:O', axis=alt.Axis(labelAngle=0, labelFontSize=10)),
+                    y=alt.Y('거래금액(억):Q', scale=alt.Scale(zero=False), title='금액(억)'),
+                    color=alt.value('#0288D1'), tooltip=['계약월', '거래금액(억)']
+                ).properties(height=200)
+                st.altair_chart(chart, use_container_width=True)
+                st.markdown("**📄 투자 의견 히스토리**")
+                for h in info.get('history', []):
+                    st.markdown(f"""<div class="timeline-box"><div class="timeline-date">📅 {h['date']}</div><div class="timeline-content">{h['opinion']}</div></div>""", unsafe_allow_html=True)
+                if is_admin():
+                    with st.form(f"append_{chosen_apt}"):
+                        col_f1, col_f2 = st.columns(2)
+                        with col_f1:
+                            up_price = st.text_input("매매 호가(억)", value=info.get('매매가', ''))
+                            up_kb = st.text_input("KB시세(억)", value=info.get('kb시세', ''))
+                        with col_f2:
+                            up_gap = st.text_input("갭", value=info.get('갭', ''))
+                            up_feat = st.text_input("특징", value=info.get('특징', ''))
+                        new_op = st.text_area("새 투자 의견 추가")
+                        if st.form_submit_button("💾 저장"):
+                            st.session_state['memo_db'][chosen_apt].update({'매매가': up_price, 'kb시세': up_kb, '갭': up_gap, '특징': up_feat})
+                            if new_op:
+                                st.session_state['memo_db'][chosen_apt]['history'].append({'date': datetime.datetime.now().strftime("%Y-%m-%d"), 'opinion': new_op})
+                            st.success("저장 완료!")
+                            st.rerun()
+                else:
+                    st.markdown('<span class="lock-badge">🔒 의견 추가는 관리자만</span>', unsafe_allow_html=True)
+
+    with subtab_compare:
+        st.markdown("##### 📊 비교 단지 목록")
+        if not st.session_state['compare_apts']:
+            st.info("👈 '단지 상세' 탭에서 단지를 추가하거나 아래에서 직접 선택하세요.")
+        all_apts = list(st.session_state['memo_db'].keys())
+        add_sel = st.multiselect("단지 직접 추가/선택", all_apts, default=st.session_state['compare_apts'], key="compare_ms")
+        st.session_state['compare_apts'] = add_sel
+
+        if st.session_state['compare_apts']:
+            col_cl, col_cr = st.columns([8, 2])
+            with col_cr:
+                if st.button("🗑️ 초기화"):
+                    st.session_state['compare_apts'] = []
                     st.rerun()
+
+            compare_rows = []
+            for apt in st.session_state['compare_apts']:
+                info = st.session_state['memo_db'].get(apt, {})
+                compare_rows.append({'단지명': apt, '지역': info.get('지역', '-'), '매매가(억)': info.get('매매가', '-'), 'KB시세(억)': info.get('kb시세', '-'), '갭': info.get('갭', '-'), '특징': info.get('특징', '-'), '세대수/연식': info.get('기본', '-')})
+            st.dataframe(pd.DataFrame(compare_rows), use_container_width=True, hide_index=True)
+
+            df_all = pd.concat([get_mock_trends(a) for a in st.session_state['compare_apts']])
+            compare_chart = alt.Chart(df_all).mark_line(point=True, strokeWidth=2).encode(
+                x=alt.X('계약월:O', axis=alt.Axis(labelAngle=0, labelFontSize=10)),
+                y=alt.Y('거래금액(억):Q', scale=alt.Scale(zero=False), title='금액(억)'),
+                color=alt.Color('아파트명:N', legend=alt.Legend(title="단지")),
+                tooltip=['계약월', '아파트명', '거래금액(억)']
+            ).properties(height=300)
+            st.altair_chart(compare_chart, use_container_width=True)
+
+    with subtab_add:
+        if not is_admin():
+            st.warning("🔒 관리자만 단지를 등록/수정할 수 있습니다. 왼쪽 사이드바에서 로그인하세요.")
         else:
-            st.info("👈 왼쪽에서 분석 타겟 단지를 선택하시거나 신규 주소를 입력해 주세요.")
+            st.markdown("#### ➕ 신규 단지 등록")
+            with st.form("new_apt_form"):
+                col_n1, col_n2 = st.columns(2)
+                with col_n1:
+                    new_reg = st.text_input("지역명", placeholder="경기 화성시")
+                    new_name = st.text_input("단지명")
+                    new_hh = st.text_input("세대수/연식", placeholder="2500세대, 2021년식")
+                    new_kb = st.text_input("KB시세 (억)", placeholder="12.0")
+                with col_n2:
+                    new_price = st.text_input("매매 호가 (억)", placeholder="12.5")
+                    new_gap = st.text_input("갭/전세가율", placeholder="3.5억 / 72%")
+                    new_feat = st.text_input("주요 호재")
+                    new_op = st.text_area("첫 투자 의견", height=80)
+                if st.form_submit_button("✅ 등록"):
+                    if new_name and new_reg:
+                        st.session_state['memo_db'][new_name] = {'지역': new_reg, '기본': new_hh, '매매가': new_price, 'kb시세': new_kb, '갭': new_gap, '특징': new_feat, 'history': [{'date': datetime.datetime.now().strftime("%Y-%m-%d"), 'opinion': new_op}]}
+                        st.success(f"'{new_name}' 등록 완료!")
+                        st.rerun()
+                    else:
+                        st.warning("지역명과 단지명은 필수입니다.")
 
-# =================================================================
-# 탭 4: 계산기 & 자동 매크로 (대출 한도 계산기 이관 완료 + 실시간 환율 자동 갱신)
-# =================================================================
+# ═══════════════════════════════════════════
+# 탭 4: 계산기 & 매크로
+# ═══════════════════════════════════════════
 with tab_finance:
-    st.subheader("💰 고정 수식형 계산기 및 매크로 지표실")
-    
-    col_c1, col_c2 = st.columns([1, 1])
-    
-    with col_c1:
-        st.markdown("#### 🔢 1. 적립식 복리 자산 계산기")
-        c_p1, c_p2 = st.columns(2)
-        with c_p1:
-            principal = st.number_input("초기 원금 (만원)", min_value=0, value=3000, step=100, key="tab4_p")
-            rate_type = st.radio("수익률 기준", ["연 수익률(%)", "월 수익률(%)"], horizontal=True, key="tab4_rt")
-            rate_val = st.number_input("수익률 입력", value=8.0, step=1.0, key="tab4_rv")
-        with c_p2:
-            monthly_addition = st.number_input("매월 추가 적립액 (만원)", min_value=0, value=100, step=10, key="tab4_ma")
-            dur_type = st.radio("투자 기간 기준", ["년(Years)", "개월(Months)"], horizontal=True, key="tab4_dt")
-            dur_val = st.number_input("투자 기간 입력", min_value=1, value=10, step=1, key="tab4_dv")
+    st.subheader("💰 계산기 & 매크로 지표실")
+    calc_tab1, calc_tab2, calc_tab3, calc_tab4 = st.tabs(["🏦 DSR 계산기", "📐 LTV & 취득세", "🔢 복리 계산기", "📊 최저시급 & 환율"])
 
-        total_months = dur_val if dur_type == "개월(Months)" else dur_val * 12
-        monthly_rate = (rate_val / 100) if rate_type == "월 수익률(%)" else (rate_val / 100) / 12
-        balance, invested_total, history = principal, principal, []
-        for m in range(1, total_months + 1):
-            balance += monthly_addition
-            invested_total += monthly_addition
-            balance += balance * monthly_rate
-            history.append({"기간(월)": m, "총자산": balance, "누적원금": invested_total})
-        df_calc = pd.DataFrame(history)
-        final_amount = df_calc["총자산"].iloc[-1]
-        gain = final_amount - invested_total
+    # ── DSR ──
+    with calc_tab1:
+        st.markdown("#### 🏦 DSR 합산 계산기 (대출 종류별 직접 입력)")
+        st.caption("**DSR = 연간 총 원리금 상환액 ÷ 연 소득 × 100** | 1금융권 40% / 2금융권 50%")
+        col_dsr_l, col_dsr_r = st.columns([5, 5])
 
-        st.markdown(f"""
-        <div class="metric-card"><h4>최종 자산 결과</h4><div class="value">{final_amount/10000:,.2f} 억 원</div></div>
-        """, unsafe_allow_html=True)
+        with col_dsr_l:
+            dsr_income = st.number_input("연 소득 (만원)", min_value=100, value=6000, step=100, key="dsr_income")
+            dsr_bank = st.radio("금융권", ["1금융권 (DSR 40%)", "2금융권 (DSR 50%)"], key="dsr_bank", horizontal=True)
+            dsr_limit = 40 if "1금융" in dsr_bank else 50
 
-    with col_c2:
-        st.markdown("#### 🏦 2. 규제식 대출 한도 계산기 (이관 완료)")
-        with st.container(border=True):
-            st.markdown("**DSR 비율 시뮬레이션**")
-            d_income = st.number_input("소득 증빙 연봉 (만원)", min_value=100, value=7000, step=500, key="tab4_income")
-            d_debt = st.number_input("기존 포함 연간 원리금 상환총액 (만원)", min_value=0, value=2500, step=100, key="tab4_debt")
-            if d_income > 0:
-                dsr = (d_debt / d_income) * 100
-                st.markdown(f"👉 **현재 산출 DSR:** **{dsr:.1f}%** (40% 초과 여부 확인 필수)")
-        with st.container(border=True):
-            st.markdown("**LTV 한도 시뮬레이션**")
-            l_price = st.number_input("주택 기준 담보가 (만원)", min_value=1000, value=100000, step=1000, key="tab4_lprice")
-            l_loan = st.number_input("신청 주담대 원금 (만원)", min_value=0, value=40000, step=1000, key="tab4_lloan")
-            if l_price > 0:
-                st.markdown(f"👉 **현재 산출 LTV:** **{(l_loan/l_price)*100:.1f}%**")
+            st.markdown('<hr class="sec-div">', unsafe_allow_html=True)
+            st.markdown("##### 기존 대출 입력")
+            with st.form("add_loan_form"):
+                l_col1, l_col2 = st.columns(2)
+                with l_col1:
+                    loan_type = st.selectbox("대출 종류", ["주택담보대출(원리금균등)", "주택담보대출(원금균등)", "주택담보대출(만기일시)", "신용대출", "마이너스통장", "카드론", "자동차할부/학자금"])
+                    loan_amt = st.number_input("대출 원금 (만원)", min_value=0, value=10000, step=500, key="l_amt")
+                with l_col2:
+                    loan_rate = st.number_input("금리 (%)", min_value=0.1, value=4.0, step=0.1, key="l_rate")
+                    loan_period = st.number_input("잔여기간 (년)", min_value=1, value=30, step=1, key="l_period")
+                    stress_rate = st.number_input("스트레스 금리 가산 (%)", min_value=0.0, value=0.0, step=0.25, key="l_stress", help="수도권 주담대 +3.0%, 지방 +0.75%")
+                if st.form_submit_button("➕ 대출 추가"):
+                    st.session_state['dsr_loans'].append({'type': loan_type, 'amt': loan_amt, 'rate': loan_rate, 'period': loan_period, 'stress': stress_rate})
+                    st.rerun()
+            if st.button("🗑️ 전체 초기화", key="clear_loans"):
+                st.session_state['dsr_loans'] = []
+                st.rerun()
+            if st.session_state['dsr_loans']:
+                loan_rows = [{'#': i+1, '종류': l['type'][:10], '원금(만)': f"{l['amt']:,}", '금리(%)': f"{l['rate']}+{l['stress']}", '기간(년)': l['period']} for i, l in enumerate(st.session_state['dsr_loans'])]
+                st.dataframe(pd.DataFrame(loan_rows), use_container_width=True, hide_index=True)
 
-    # 하단 레이아웃: 10년치 최저임금 및 봇 기반 라이브 환율 갱신 시스템
-    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-    st.subheader("📊 3. 최근 10개년 최저시급 트렌드 및 실시간 환율 자동 매크로")
-    
-    # 무료 오픈 외부 API를 활용해, 사용자가 직접 수동으로 환율을 치지 않아도 시스템이 구동될 때 백그라운드에서 실시간 원달러 환율을 자동 스크래핑해오는 로직 탑재
-    @st.cache_data(ttl=3600) # 1시간 단위 캐싱으로 서버 속도 유지
-    def get_live_usd_exchange_rate():
-        try:
-            res = requests.get("https://open.er-api.com/v6/latest/USD").json()
-            return round(res['rates']['KRW'], 1)
-        except:
-            return 1450.0 # 외부 통신 에러 발생 시 최신 백업 환율값 방어선 구축
+        with col_dsr_r:
+            st.markdown("##### DSR 계산 결과")
 
-    live_rate = get_live_usd_exchange_rate()
-    st.caption(f"📢 현재 기준 실시간 원/달러 환율 매크로 수집 정보: **1 USD = {live_rate} 원** (자동 실시간 업데이트 중)")
+            def calc_annual(loan):
+                amt = loan['amt'] * 10000
+                r = (loan['rate'] + loan['stress']) / 100
+                pm = loan['period'] * 12
+                mr = r / 12
+                lt = loan['type']
+                if "만기일시" in lt or "마이너스" in lt:
+                    return amt * r / 10000
+                elif "신용대출" in lt:
+                    return amt * (0.20 + r) / 10000
+                elif "카드론" in lt:
+                    pm2 = 36
+                    monthly = amt * mr / (1 - (1+mr)**(-pm2)) if mr > 0 else amt/pm2
+                    return monthly * 12 / 10000
+                elif "원금균등" in lt:
+                    return ((amt/pm) + amt*r/12) * 12 / 10000
+                else:
+                    monthly = amt * mr / (1-(1+mr)**(-pm)) if mr > 0 else amt/pm
+                    return monthly * 12 / 10000
 
-    # 10개년 전수 데이터 셋
-    wage_data = {
-        '연도': ['2017', '2018', '2019', '2020', '2021', '2022', '2023', '2024', '2025', '2026'],
-        '최저시급(원)': [6470, 7530, 8350, 8590, 8720, 9160, 9620, 9860, 10030, 10320]
-    }
-    df_10y = pd.DataFrame(wage_data)
-    # 실시간 가져온 라이브 환율을 10개년 데이터에 실시간 나누기 연산하여 달러 가치 변환 매크로 완성
-    df_10y['달러환산(USD)'] = round(df_10y['최저시급(원)'] / live_rate, 2)
+            total_annual = sum(calc_annual(l) for l in st.session_state['dsr_loans'])
+            cur_dsr = (total_annual / dsr_income * 100) if dsr_income > 0 else 0
+            remaining = max(0, dsr_income * dsr_limit / 100 - total_annual)
+            mr_ref = 0.04/12
+            extra_loan_est = remaining / 12 / mr_ref * (1-(1+mr_ref)**-360) / 10000 if remaining > 0 else 0
 
-    base = alt.Chart(df_10y).encode(x=alt.X('연도:O', axis=alt.Axis(labelAngle=0)))
-    bars = base.mark_bar(opacity=0.35, color='#66BB6A', width=25).encode(y=alt.Y('최저시급(원):Q', title='최저시급 (원)'))
-    lines = base.mark_line(color='#0288D1', strokeWidth=3, point=True).encode(y=alt.Y('달러환산(USD):Q', title='달러 가치 (USD)'))
-    
-    st.altair_chart(alt.layer(bars, lines).resolve_scale(y='independent'), use_container_width=True)
-    st.dataframe(df_10y.T, use_container_width=True)
+            if cur_dsr <= dsr_limit * 0.8:
+                box_cls = "result-box"
+                emoji = "✅"
+            elif cur_dsr <= dsr_limit:
+                box_cls = "warn-box"
+                emoji = "⚠️"
+            else:
+                box_cls = "danger-box"
+                emoji = "❌"
+
+            st.markdown(f"""<div class="{box_cls}">
+              <div class="r-label">현재 DSR</div>
+              <div class="r-value">{emoji} {cur_dsr:.1f}%</div>
+              <div class="r-sub">한도: {dsr_limit}% | 연간 원리금 합계: {total_annual:,.0f}만원</div>
+            </div>""", unsafe_allow_html=True)
+
+            if cur_dsr <= dsr_limit:
+                st.markdown(f"""<div class="result-box">
+                  <div class="r-label">추가 여력 (연 원리금)</div>
+                  <div class="r-value">{remaining:,.0f} 만원/년</div>
+                  <div class="r-sub">≈ 금리 4%·30년 기준 추가 대출 가능 {extra_loan_est:.1f}억</div>
+                </div>""", unsafe_allow_html=True)
+            else:
+                st.error(f"DSR {dsr_limit}% 초과 — 신규 대출이 어렵습니다.")
+
+            if st.session_state['dsr_loans']:
+                detail = [{'종류': l['type'][:10], '연 원리금(만)': f"{calc_annual(l):,.0f}", 'DSR 기여': f"{calc_annual(l)/dsr_income*100:.1f}%"} for l in st.session_state['dsr_loans']]
+                st.dataframe(pd.DataFrame(detail), use_container_width=True, hide_index=True)
+            st.caption("※ 참고용 계산기. 실제 심사 결과와 다를 수 있습니다.")
+
+    # ── LTV & 취득세 ──
+    with calc_tab2:
+        st.markdown("#### 📐 LTV 한도 & 취득세 계산기")
+        apt_names = list(st.session_state['memo_db'].keys())
+        col_ltv1, col_ltv2 = st.columns([1, 1])
+
+        with col_ltv1:
+            st.markdown("##### 🏠 주택 정보")
+            auto_fill = st.selectbox("관심단지 KB시세 불러오기", ["직접 입력"] + apt_names, key="ltv_apt_sel")
+            if auto_fill != "직접 입력":
+                try:
+                    default_price = int(float(st.session_state['memo_db'][auto_fill].get('kb시세', '10')) * 10000)
+                except:
+                    default_price = 100000
+            else:
+                default_price = 100000
+
+            house_price = st.number_input("주택 KB시세/담보가 (만원)", min_value=1000, value=default_price, step=500, key="ltv_price")
+            owner_cnt = st.radio("취득 후 주택 수", ["1주택 (무주택→1주택)", "2주택", "3주택 이상"], key="ltv_owner")
+            is_regulated = st.radio("규제지역 여부", ["규제지역 (강남·서초·송파·용산)", "비규제지역"], key="ltv_regulated")
+            is_first = st.checkbox("생애최초 구매 여부", key="ltv_first")
+
+        with col_ltv2:
+            st.markdown("##### 📊 LTV & 취득세 결과")
+            regulated = "규제지역" in is_regulated
+            if "1주택" in owner_cnt:
+                ltv_rate = 50 if regulated else 70
+            elif "2주택" in owner_cnt:
+                ltv_rate = 30 if regulated else 60
+            else:
+                ltv_rate = 20 if regulated else 50
+            if is_first and "1주택" in owner_cnt:
+                ltv_rate = min(ltv_rate + 10, 80)
+                st.caption("💚 생애최초 LTV +10% 우대 적용")
+
+            max_loan = house_price * ltv_rate / 100
+            st.markdown(f"""<div class="result-box">
+              <div class="r-label">LTV {ltv_rate}% 기준 최대 대출 한도</div>
+              <div class="r-value">{max_loan/10000:.2f} 억원</div>
+              <div class="r-sub">({max_loan:,.0f}만원)</div>
+            </div>""", unsafe_allow_html=True)
+
+            st.markdown('<hr class="sec-div">', unsafe_allow_html=True)
+            price_eok = house_price / 10000
+            if "1주택" in owner_cnt:
+                acq_rate = 1.0 if price_eok <= 6 else (3.0 if price_eok > 9 else 1.0 + (price_eok-6)/3*2.0)
+                if is_first: acq_rate = max(acq_rate - 0.5, 0.5)
+            elif "2주택" in owner_cnt:
+                acq_rate = 8.0 if regulated else (1.0 if price_eok <= 6 else (3.0 if price_eok > 9 else 1.0+(price_eok-6)/3*2.0))
+            else:
+                acq_rate = 12.0 if regulated else 8.0
+
+            edu_r = 0.1 if acq_rate <= 1 else (0.2 if acq_rate <= 3 else 0.4)
+            farm_r = 0.0 if acq_rate <= 1 else (0.2 if acq_rate <= 3 else 0.6)
+            acq_tax = house_price * acq_rate / 100
+            edu_tax = house_price * edu_r / 100
+            farm_tax = house_price * farm_r / 100
+            total_tax = acq_tax + edu_tax + farm_tax
+            tax_box = "result-box" if acq_rate <= 3 else ("warn-box" if acq_rate <= 8 else "danger-box")
+            st.markdown(f"""<div class="{tax_box}">
+              <div class="r-label">취득 관련 세금 합계 ({acq_rate:.1f}+{edu_r:.1f}+{farm_r:.1f}%)</div>
+              <div class="r-value">{total_tax/10000:.3f} 억원 ({total_tax:,.0f}만)</div>
+              <div class="r-sub">취득세 {acq_tax:,.0f}만 | 지방교육세 {edu_tax:,.0f}만 | 농특세 {farm_tax:,.0f}만</div>
+            </div>""", unsafe_allow_html=True)
+
+            st.markdown("**주택 취득세율표 (2025년 기준)**")
+            st.dataframe(pd.DataFrame({
+                '구분': ['1주택 ≤6억', '1주택 6~9억', '1주택 >9억', '2주택 비규제', '2주택 조정지역', '3주택 비규제', '3주택+ 조정지역'],
+                '취득세율': ['1%', '1~3%', '3%', '1~3%', '8%', '8%', '12%'],
+            }), use_container_width=True, hide_index=True)
+            st.caption("※ 참고용. 정책 변경 시 달라질 수 있습니다.")
+
+    # ── 복리 계산기 ──
+    with calc_tab3:
+        st.markdown("#### 🔢 적립식 복리 자산 계산기")
+        col_c1, col_c2 = st.columns([1, 1])
+        with col_c1:
+            r1, r2 = st.columns(2)
+            with r1:
+                principal = st.number_input("초기 원금 (만원)", min_value=0, value=3000, step=100, key="cp")
+                rtype = st.radio("수익률 기준", ["연 수익률(%)", "월 수익률(%)"], horizontal=True, key="crt")
+                rval = st.number_input("수익률 (%)", value=8.0, step=1.0, key="crv")
+            with r2:
+                madd = st.number_input("매월 추가 적립 (만원)", min_value=0, value=100, step=10, key="cma")
+                dtype = st.radio("기간 기준", ["년", "개월"], horizontal=True, key="cdt")
+                dval = st.number_input("투자 기간", min_value=1, value=10, step=1, key="cdv")
+
+            total_m = dval if dtype == "개월" else dval * 12
+            mr = (rval/100) if "월" in rtype else (rval/100)/12
+            bal, inv, hist = principal, principal, []
+            for m in range(1, total_m+1):
+                bal += madd; inv += madd; bal += bal * mr
+                if m % 12 == 0 or m == total_m:
+                    hist.append({"기간": f"{m//12}년" if m%12==0 else f"{m}개월", "총자산(만)": round(bal), "누적원금(만)": round(inv)})
+            df_h = pd.DataFrame(hist)
+            final_amt = df_h["총자산(만)"].iloc[-1]
+            gain_amt = final_amt - inv
+            st.markdown(f"""<div class="result-box">
+              <div class="r-label">최종 자산</div>
+              <div class="r-value">{final_amt/10000:.2f} 억원</div>
+              <div class="r-sub">총 수익 {gain_amt/10000:.2f}억 | 수익률 {gain_amt/inv*100:.1f}%</div>
+            </div>""", unsafe_allow_html=True)
+        with col_c2:
+            st.dataframe(df_h, use_container_width=True, hide_index=True, height=320)
+
+    # ── 최저시급 & 환율 ──
+    with calc_tab4:
+        st.markdown("#### 📊 연도별 최저시급 & 당시 환율 달러 환산")
+        st.caption("각 연도의 **당시 연평균 원/달러 환율**을 적용해 달러 가치를 계산합니다.")
+
+        @st.cache_data(ttl=3600)
+        def get_live_rate():
+            try:
+                return round(requests.get("https://open.er-api.com/v6/latest/USD", timeout=5).json()['rates']['KRW'], 1)
+            except:
+                return 1440.0
+
+        live_rate = get_live_rate()
+
+        wage_df = pd.DataFrame({
+            '연도':          ['2017','2018','2019','2020','2021','2022','2023','2024','2025','2026'],
+            '최저시급(원)':  [6470,  7530,  8350,  8590,  8720,  9160,  9620,  9860,  10030, 10320],
+            '연평균환율(원/$)':[1130.5,1100.3,1165.7,1180.1,1144.0,1291.9,1305.5,1363.0,1421.0, live_rate],
+        })
+        wage_df['달러환산(USD)'] = (wage_df['최저시급(원)'] / wage_df['연평균환율(원/$)']).round(2)
+
+        st.caption(f"📡 2026년 실시간 환율: **{live_rate:,.0f} 원/달러**")
+
+        # 이중 축 차트 + 막대/점 위에 레이블 표기
+        base = alt.Chart(wage_df).encode(x=alt.X('연도:O', axis=alt.Axis(labelAngle=0, labelFontSize=11)))
+
+        bars = base.mark_bar(color='#66BB6A', opacity=0.5, width=30).encode(
+            y=alt.Y('최저시급(원):Q', title='최저시급 (원)', axis=alt.Axis(titleColor='#388E3C', format=',')),
+        )
+        bar_lbl = base.mark_text(align='center', baseline='bottom', dy=-3, fontSize=10, color='#1B5E20', fontWeight='bold').encode(
+            y=alt.Y('최저시급(원):Q'), text=alt.Text('최저시급(원):Q', format=',d')
+        )
+        line = base.mark_line(color='#0288D1', strokeWidth=2.5, point=alt.OverlayMarkDef(color='#0288D1', size=60)).encode(
+            y=alt.Y('달러환산(USD):Q', title='달러 환산 (USD)', axis=alt.Axis(titleColor='#0288D1', format='.2f')),
+        )
+        line_lbl = base.mark_text(align='center', baseline='top', dy=8, fontSize=10, color='#01579B', fontWeight='bold').encode(
+            y=alt.Y('달러환산(USD):Q'), text=alt.Text('달러환산(USD):Q', format='.2f')
+        )
+
+        combined = alt.layer(bars, bar_lbl, line, line_lbl).resolve_scale(y='independent').properties(height=340)
+        st.altair_chart(combined, use_container_width=True)
+
+        display_df = wage_df.copy()
+        display_df['인상액(원)'] = display_df['최저시급(원)'].diff().fillna(0).astype(int)
+        display_df['인상률(%)'] = (display_df['최저시급(원)'].pct_change() * 100).round(1).fillna(0)
+        st.dataframe(display_df[['연도','최저시급(원)','인상액(원)','인상률(%)','연평균환율(원/$)','달러환산(USD)']],
+                     use_container_width=True, hide_index=True)
+        st.caption("📌 27년 최저시급 확정 후 코드의 wage_df에 행을 추가하면 자동 반영됩니다.")
