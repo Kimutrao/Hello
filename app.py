@@ -9,7 +9,7 @@ from streamlit_folium import st_folium
 from geopy.geocoders import Nominatim
 
 # ─────────────────────────────────────────
-# 1. 페이지 설정 & 전역 CSS (로그인 화면 숨김 처리)
+# 1. 페이지 설정 & 전역 CSS 
 # ─────────────────────────────────────────
 st.set_page_config(page_title="김철수의 투자기록실", layout="wide", initial_sidebar_state="collapsed")
 
@@ -48,7 +48,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# ── 관리자 세팅 (사이드바 숨김 처리) ──
+# ── 관리자 세팅 (로그인 폼 분리) ──
 ADMIN_PW = "kimcs2024!"  
 def is_admin(): return st.session_state.get("admin_logged_in", False)
 
@@ -64,7 +64,7 @@ if 'memo_db' not in st.session_state:
 if 'geo_db' not in st.session_state:
     st.session_state['geo_db'] = {'상암월드컵파크10단지': [37.5843, 126.8821], '호반베르디움더센트럴': [37.2735, 126.9422]}
 
-# ── 사이드바 (필요할 때만 열어서 사용) ──
+# ── 사이드바 ──
 with st.sidebar:
     st.markdown("### 🔐 사이트 관리자 메뉴")
     if is_admin():
@@ -86,9 +86,9 @@ with tab_basic:
 with tab_mind:
     st.info("이전에 완성했던 게시판 기능이 이곳에 들어갑니다.")
 
-# ═══════════════════════════════════════════
-# 탭 3: 관심단지 분석 & 비교 (UI 대폭 개편)
-# ═══════════════════════════════════════════
+# =================================================================
+# 탭 3: 관심단지 분석 & 비교
+# =================================================================
 with tab_realestate:
     st.subheader("🏢 관심단지 레이더 & 교차 비교")
 
@@ -101,7 +101,6 @@ with tab_realestate:
         for m in months:
             trend += random.uniform(-0.06, 0.1)
             base_m = bp + trend
-            # 매월 1~4건의 실거래가(빨간 점) 발생 시뮬레이션
             for _ in range(random.randint(1, 4)):
                 raw_trades.append({'계약월': m, '아파트명': apt_name, '실거래가(억)': round(base_m + random.uniform(-0.15, 0.15), 2)})
         return pd.DataFrame(raw_trades)
@@ -123,7 +122,6 @@ with tab_realestate:
                 info = st.session_state['memo_db'][chosen_apt]
                 kb_price = float(info.get('kb시세', 0))
                 
-                # 상단 1: 현재 호가 및 시세 바
                 st.markdown(f"#### 🎯 {chosen_apt}")
                 st.markdown(f"""
                 <div style="display:flex; justify-content:space-between; background:#F9FBFD; padding:15px; border-radius:10px; border:1px solid #B3E5FC;">
@@ -136,24 +134,19 @@ with tab_realestate:
 
                 st.markdown('<hr class="sec-div">', unsafe_allow_html=True)
 
-                # 상단 2: 그래프 컨트롤 바
                 g_col1, g_col2 = st.columns([7, 3])
                 with g_col1: st.markdown("##### 📈 국토부 실거래가 추이 (건별 거래량 표기)")
-                with g_col2: view_years = st.slider("조회 기간 (년)", 1, 5, 1, label_visibility="collapsed") # 기본 1년 설정
+                with g_col2: view_years = st.slider("조회 기간 (년)", 1, 5, 1, label_visibility="collapsed")
                 
-                # 산점도(빨간 점) + 선그래프(평균)
                 df_raw = get_mock_scatter_data(chosen_apt, view_years)
                 df_mean = df_raw.groupby('계약월', as_index=False)['실거래가(억)'].mean()
                 
                 base = alt.Chart(df_raw).encode(x=alt.X('계약월:O', axis=alt.Axis(labelAngle=0, labelFontSize=10)))
-                # 빨간 점 (건별 실거래)
                 scatter = base.mark_circle(color='red', opacity=0.6, size=40).encode(y='실거래가(억):Q', tooltip=['계약월', '실거래가(억)'])
-                # 파란 선 (월평균)
                 line = alt.Chart(df_mean).mark_line(color='#0288D1', strokeWidth=3).encode(x='계약월:O', y='실거래가(억):Q')
                 
                 st.altair_chart((scatter + line).properties(height=300), use_container_width=True)
 
-                # 하단: 2단 분할 (좌: 지도/의견, 우: 세금/대출)
                 bot_col1, bot_col2 = st.columns([5, 5])
                 
                 with bot_col1:
@@ -170,18 +163,155 @@ with tab_realestate:
                 
                 with bot_col2:
                     st.markdown("##### 💰 예상 대출 한도 (KB시세 기준)")
+                    ltv_70 = f"{kb_price * 0.7:.2f}"
+                    ltv_50 = f"{kb_price * 0.5:.2f}"
+                    ltv_30 = f"{kb_price * 0.3:.2f}"
                     st.markdown(f"""
-                    - **LTV 70% (생애최초 등):** <b style="color:#0288D1;">{kb_price * 0.7:.2f} 억</b>
-                    - **LTV 50% (규제/일반):** <b style="color:#388E3C;">{kb_price * 0.5:.2f} 억</b>
-                    - **LTV 30% (다주택 등):** <b style="color:#E65100;">{kb_price * 0.3:.2f} 억</b>
+                    - **LTV 70% (생애최초 등):** <b style="color:#0288D1;">{ltv_70} 억</b>
+                    - **LTV 50% (규제/일반):** <b style="color:#388E3C;">{ltv_50} 억</b>
+                    - **LTV 30% (다주택 등):** <b style="color:#E65100;">{ltv_30} 억</b>
                     """, unsafe_allow_html=True)
                     
+                    # ── [안전화 적용] 문자열 선행 포맷팅으로 SyntaxError 원천 차단 ──
                     st.markdown("##### 🏛️ 예상 취득세 (농특/교육세 포함 추정치)")
-                    # 실거래/호가 평균값 기반 러프한 계산
                     est_tax_1 = kb_price * 10000 * 0.011 if kb_price <= 6 else kb_price * 10000 * 0.033
                     est_tax_2 = kb_price * 10000 * 0.084
                     est_tax_3 = kb_price * 10000 * 0.124
+                    
+                    tax1_eok, tax1_man = f"{est_tax_1/10000:.2f}", f"{est_tax_1:,.0f}"
+                    tax2_eok, tax2_man = f"{est_tax_2/10000:.2f}", f"{est_tax_2:,.0f}"
+                    tax3_eok, tax3_man = f"{est_tax_3/10000:.2f}", f"{est_tax_3:,.0f}"
+                    
                     st.markdown(f"""
-                    - **1주택자 (1~3%):** 약 **{est_tax_1/10000:.2f} 억** ({est_tax_1:,.0f}만)
-                    - **2주택자 (조정 8%):** 약 **{est_tax_2/10000:.2f} 억** ({est_tax_2:,.0f}만)
-                    - **3주택자 (조정 12%):** 약 **{est_tax_3/10000:.2f} 억** ({est_tax_3:,.0f}만
+                    - **1주택자 (1~3%):** 약 **{tax1_eok} 억** ({tax1_man}만)
+                    - **2주택자 (조정 8%):** 약 **{tax2_eok} 억** ({tax2_man}만)
+                    - **3주택자 (조정 12%):** 약 **{tax3_eok} 억** ({tax3_man}만)
+                    """, unsafe_allow_html=True)
+
+    # ── [2] 실거래가 다중 비교 ──
+    with sub_comp:
+        all_apts = list(st.session_state['memo_db'].keys())
+        comp_apts = st.multiselect("비교 단지 선택", all_apts, default=all_apts[:2])
+        if comp_apts:
+            rows = []
+            for apt in comp_apts:
+                info = st.session_state['memo_db'].get(apt, {})
+                df_raw = get_mock_scatter_data(apt, 1)
+                rows.append({'단지명': apt, '지역': info.get('지역', '-'), '세대수': info.get('기본', '-'), '전월 실거래 평균(억)': df_raw['실거래가(억)'].mean().round(2), '전월 거래량': info.get('전월거래량', '-')})
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    # ── [3] 호가/매물 비교 ──
+    with sub_hoga:
+        st.markdown("#### 📋 단지별 현재 호가 현황판")
+        hoga_rows = []
+        for apt, info in st.session_state['memo_db'].items():
+            hoga_rows.append({'단지명': apt, '지역': info.get('지역', '-'), 'KB시세(억)': info.get('kb시세', '-'), '매매 호가(억)': info.get('호가_매매', '-'), '전세 호가(억)': info.get('호가_전세', '-'), '호가 갭(억)': round(float(info.get('호가_매매',0)) - float(info.get('호가_전세',0)), 2), '특징': info.get('특징', '-')})
+        st.dataframe(pd.DataFrame(hoga_rows), use_container_width=True, hide_index=True)
+
+    # ── [4] 단지 등록 (관리자) ──
+    with sub_add:
+        if not is_admin(): st.warning("관리자 로그인 후 이용 가능합니다.")
+        else: st.write("단지 등록 폼 (기존과 동일)")
+
+# =================================================================
+# 탭 4: 계산기 & 매크로 (안전화 수식 적용)
+# =================================================================
+with tab_finance:
+    st.subheader("💰 통합 계산기 & 매크로 지표")
+    calc_tab1, calc_tab2, calc_tab3, calc_tab4 = st.tabs(["🏦 DSR 계산기", "📐 LTV / 취득세", "🔢 복리 계산기", "📊 최저시급 & 환율"])
+
+    # ── 1. DSR 계산기 ──
+    with calc_tab1:
+        col_dsr_l, col_dsr_r = st.columns([5, 5])
+        with col_dsr_l:
+            dsr_income = st.number_input("연 소득 (만원)", min_value=100, value=6000, step=100)
+            with st.form("add_loan_form"):
+                st.markdown("##### ➕ 기존 대출 추가")
+                l_col1, l_col2 = st.columns(2)
+                with l_col1:
+                    l_type = st.selectbox("대출 종류", ["주택담보대출(원리금균등)", "신용대출", "마이너스통장"])
+                    l_amt = st.number_input("원금 (만)", value=5000, step=100)
+                with l_col2:
+                    l_rate = st.number_input("금리(%)", value=4.5, step=0.1)
+                    if l_type in ["신용대출", "마이너스통장"]:
+                        st.info("※ 규정에 따라 산정기간 5년이 강제 적용됩니다.")
+                        l_period = 5
+                    else:
+                        l_period = st.number_input("잔여 기간(년)", value=30, step=1)
+                if st.form_submit_button("추가"):
+                    st.session_state['dsr_loans'].append({'type': l_type, 'amt': l_amt, 'rate': l_rate, 'period': l_period})
+                    st.rerun()
+
+            if st.button("초기화"): st.session_state['dsr_loans'] = []; st.rerun()
+
+        with col_dsr_r:
+            def calc_annual(l):
+                pm = l['period'] * 12; mr = l['rate'] / 100 / 12
+                if "마이너스" in l['type']: return l['amt'] * l['rate'] / 100
+                return (l['amt'] * mr / (1-(1+mr)**(-pm))) * 12 if mr > 0 else (l['amt']/pm)*12
+            
+            total_annual = sum(calc_annual(l) for l in st.session_state['dsr_loans'])
+            cur_dsr = (total_annual / dsr_income * 100) if dsr_income > 0 else 0
+            
+            box_cls = "result-box" if cur_dsr <= 40 else "danger-box"
+            dsr_f, annual_f = f"{cur_dsr:.1f}", f"{total_annual:,.0f}"
+            st.markdown(f"""<div class="{box_cls}">
+              <div class="r-label">현재 합산 DSR</div>
+              <div class="r-value">{dsr_f}%</div>
+              <div class="r-sub">연간 상환액: {annual_f} 만원</div>
+            </div>""", unsafe_allow_html=True)
+
+    # ── 2. LTV/취득세 ──
+    with calc_tab2:
+        st.info("여기에 주택수별 세금 종합 시뮬레이터가 연동됩니다.")
+
+    # ── 3. 복리 계산기 ──
+    with calc_tab3:
+        col_c1, col_c2 = st.columns([4, 6])
+        with col_c1:
+            principal = st.number_input("원금 (만원)", value=3000, step=100)
+            rate_val = st.number_input("연 수익률(%)", value=8.0, step=1.0)
+            madd = st.number_input("매월 추가(만원)", value=100, step=10)
+            dval = st.number_input("기간(년)", value=10, step=1)
+        with col_c2:
+            mr = (rate_val/100)/12; bal, inv, hist = principal, principal, []
+            for m in range(1, dval*12+1):
+                madd_val = madd
+                bal += madd_val; inv += madd_val; bal += bal * mr
+                if m % 12 == 0: hist.append({"연차": f"{m//12}년", "총자산": round(bal), "누적원금": round(inv)})
+            df_h = pd.DataFrame(hist)
+            
+            base_c = alt.Chart(df_h).encode(x=alt.X('연차:O', axis=alt.Axis(labelAngle=0)))
+            area = base_c.mark_area(opacity=0.3, color='#9E9E9E').encode(y=alt.Y('누적원금:Q'))
+            line = base_c.mark_line(color='#388E3C', strokeWidth=3, point=True).encode(y='총자산:Q')
+            st.altair_chart((area + line).properties(height=250), use_container_width=True)
+            
+            bal_f, inv_f, interest_f = f"{bal/10000:.2f}", f"{inv:,.0f}", f"{(bal-inv):,.0f}"
+            st.markdown(f"""<div class="result-box">
+              <div class="r-label">최종 자산 결산</div>
+              <div class="r-value">{bal_f} 억원</div>
+              <div class="r-sub">원금 합계: {inv_f}만 원 | 순수 이자: {interest_f}만 원</div>
+            </div>""", unsafe_allow_html=True)
+
+    # ── 4. 최저시급 ──
+    with calc_tab4:
+        @st.cache_data(ttl=3600)
+        def get_live_rate():
+            try: return round(requests.get("https://open.er-api.com/v6/latest/USD", timeout=5).json()['rates']['KRW'], 1)
+            except: return 1450.0
+        live_rate = get_live_rate()
+
+        wage_df = pd.DataFrame({
+            '연도': ['2018','2019','2020','2021','2022','2023','2024','2025','2026'],
+            '최저시급(원)': [7530, 8350, 8590, 8720, 9160, 9620, 9860, 10030, 10320],
+            '연평균환율(원/$)':[1100.3, 1165.7, 1180.1, 1144.0, 1291.9, 1305.5, 1363.0, 1421.0, live_rate],
+        })
+        wage_df['달러환산(USD)'] = (wage_df['최저시급(원)'] / wage_df['연평균환율(원/$)']).round(2)
+
+        base = alt.Chart(wage_df).encode(x=alt.X('연도:O', axis=alt.Axis(labelAngle=0)))
+        bars = base.mark_bar(color='#B3E5FC', opacity=0.8, width=35).encode(y=alt.Y('최저시급(원):Q', title='최저시급 (KRW)'))
+        line = base.mark_line(color='#388E3C', strokeWidth=3, point=alt.OverlayMarkDef(size=60)).encode(y=alt.Y('달러환산(USD):Q', title='달러 가치 (USD)', scale=alt.Scale(domain=[6.0, 8.5])))
+        line_txt = line.mark_text(align='left', dx=8, dy=-5, fontSize=11, color='#1B5E20', fontWeight='bold').encode(text=alt.Text('달러환산(USD):Q', format='.2f'))
+
+        st.altair_chart(alt.layer(bars, line, line_txt).resolve_scale(y='independent').properties(height=350), use_container_width=True)
+        st.dataframe(wage_df, use_container_width=True, hide_index=True)
