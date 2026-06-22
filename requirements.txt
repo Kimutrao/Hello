@@ -2,6 +2,6 @@ streamlit
 pandas
 numpy
 python-docx
-altair
-requests
 folium
+streamlit-folium
+geopy
