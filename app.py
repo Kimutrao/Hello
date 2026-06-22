@@ -281,6 +281,48 @@ with tab_realestate:
                 st.markdown(f"👉 **나의 LTV:** <span style='color:#1B5E20; font-weight:bold; font-size:1.2rem;'>{ltv_result:.1f}%</span>", unsafe_allow_html=True)
 
 
+import streamlit as st
+import pandas as pd
+import altair as alt
+
+# 데이터 세팅
+data = {
+    '연도': ['2020', '2021', '2022', '2023', '2024', '2025', '2026'],
+    '최저시급(원)': [8590, 8720, 9160, 9620, 9860, 10030, 10320],
+    '적용환율': [1086.3, 1188.8, 1264.5, 1288.0, 1472.5, 1439.0, 1521.4],
+    '달러환산(USD)': [7.91, 7.34, 7.24, 7.47, 6.70, 6.97, 6.78]
+}
+df_wage = pd.DataFrame(data)
+
+st.markdown("#### 📉 원화 가치 하락과 실질 최저시급(USD)의 역설")
+st.write("원화 기준 최저시급은 꾸준히 올랐지만, 고환율로 인해 달러 기준 실질 가치는 오히려 하락했습니다.")
+
+# Altair 그래프 그리기 (이중 축)
+base = alt.Chart(df_wage).encode(x=alt.X('연도:O', title='연도'))
+
+# 원화 최저시급 (막대 그래프)
+bar = base.mark_bar(opacity=0.4, color='#C8E6C9', width=30).encode(
+    y=alt.Y('최저시급(원):Q', title='최저시급 (KRW)'),
+    tooltip=['연도', '최저시급(원)', '적용환율']
+)
+
+# 달러 환산 최저시급 (꺾은선 그래프)
+line = base.mark_line(color='#1B5E20', strokeWidth=3, point=alt.OverlayMarkDef(color='#1B5E20', size=100)).encode(
+    y=alt.Y('달러환산(USD):Q', title='달러 환산액 (USD)', scale=alt.Scale(domain=[6.0, 8.5])),
+    tooltip=['연도', '달러환산(USD)']
+)
+
+# 두 그래프 겹치기 (독립된 Y축 사용)
+chart = alt.layer(bar, line).resolve_scale(
+    y='independent'
+).properties(height=400)
+
+st.altair_chart(chart, use_container_width=True)
+
+# 하단에 데이터표 제공
+st.dataframe(df_wage, use_container_width=True, hide_index=True)
+
+
 # ═══════════════════════════════════════════
 # 탭 4: 복리 계산기 (업그레이드 버전)
 # ═══════════════════════════════════════════
